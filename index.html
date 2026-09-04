@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TollRoute — Ruta mas rapida con tu presupuesto</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow:hidden}
+#map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1}
+.bottom-panel{position:absolute;bottom:0;left:0;right:0;background:rgba(255,255,255,0.95);backdrop-filter:blur(10px);border-radius:20px 20px 0 0;padding:20px;z-index:1000;box-shadow:0 -4px 20px rgba(0,0,0,0.15);max-width:600px;margin:0 auto}
+.route-inputs{display:flex;gap:10px;margin-bottom:15px;align-items:center}
+.route-inputs input{flex:1;padding:12px 15px;border:2px solid #e0e0e0;border-radius:12px;font-size:16px;outline:none}
+.route-inputs input:focus{border-color:#2196F3}
+.route-inputs button{padding:12px 24px;background:#2196F3;color:white;border:none;border-radius:12px;font-size:16px;cursor:pointer;font-weight:600}
+.route-inputs button:hover{background:#1976D2}
+.route-inputs button:disabled{background:#ccc;cursor:not-allowed}
+.slider-container{margin:15px 0}
+.slider-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.slider-label span{font-size:14px;color:#666}
+.slider-label strong{font-size:24px;color:#2196F3}
+input[type=range]{width:100%;height:8px;border-radius:4px;background:#e0e0e0;outline:none;-webkit-appearance:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#2196F3;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.3)}
+.route-info{background:#f5f5f5;border-radius:12px;padding:15px;margin-top:15px}
+.route-info .main-stats{display:flex;gap:20px;justify-content:center;margin-bottom:10px}
+.stat{text-align:center}
+.stat .value{font-size:28px;font-weight:700;color:#333}
+.stat .label{font-size:12px;color:#888;text-transform:uppercase}
+.alternatives{display:flex;gap:10px;margin-top:12px;overflow-x:auto;padding-bottom:5px}
+.alt-card{flex:0 0 auto;min-width:140px;padding:12px;border-radius:10px;cursor:pointer;text-align:center;border:2px solid transparent;transition:all 0.2s}
+.alt-card:hover{transform:translateY(-2px)}
+.alt-card.active{border-color:#2196F3;background:#e3f2fd}
+.alt-card.fastest{background:#e8f5e9}
+.alt-card.cheapest{background:#fff3e0}
+.alt-card .alt-time{font-size:18px;font-weight:700}
+.alt-card .alt-price{font-size:14px;color:#666;margin-top:4px}
+.alt-card .alt-label{font-size:11px;color:#999;margin-top:4px}
+.loading{text-align:center;color:#666;padding:20px}
+.error{color:#d32f2f;text-align:center;padding:10px}
+@media(max-width:480px){.bottom-panel{padding:15px;border-radius:16px 16px 0 0}.route-inputs{flex-wrap:wrap}.route-inputs input{width:100%}.stat .value{font-size:22px}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="bottom-panel">
+<div class="route-inputs">
+<input type="text" id="origin" placeholder="Origen (ej: Madrid)" value="Madrid">
+<span style="font-size:20px">→</span>
+<input type="text" id="destination" placeholder="Destino (ej: Barcelona)" value="Barcelona">
+<button onclick="calculateRoute()" id="calcBtn">Calcular</button>
+</div>
+<div class="slider-container" id="sliderContainer" style="display:none">
+<div class="slider-label"><span>Maximo en peajes</span><strong id="budgetValue">0 €</strong></div>
+<input type="range" id="budgetSlider" min="0" max="100" value="0" step="0.5" oninput="updateBudget(this.value)">
+<div class="route-info" id="routeInfo">
+<div class="main-stats">
+<div class="stat"><div class="value" id="timeValue">--</div><div class="label">Tiempo</div></div>
+<div class="stat"><div class="value" id="priceValue">--</div><div class="label">Peajes</div></div>
+<div class="stat"><div class="value" id="distValue">--</div><div class="label">Distancia</div></div>
+</div>
+<div class="alternatives" id="alternatives"></div>
+</div>
+</div>
+<div id="status" class="loading" style="display:none">Calculando ruta...</div>
+</div>
+<script>
+let tollData=null,currentRoutes={},map,routeLayers=[];
+async function loadTollData(){try{const r=await fetch('spain_tolls.json');tollData=await r.json();console.log('Cargados '+tollData.metadata.total_segments+' segmentos')}catch(e){console.warn('Usando datos de muestra');tollData={networks:[{road_id:'AP-7',segments:[{entry_point:'Barcelona',exit_point:'Valencia',rates:{light:22.3}}]}]}}}
+function initMap(){map=L.map('map').setView([40.4168,-3.7038],6);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18}).addTo(map)}
+async function geocode(q){const u='https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(q+', Espana')+'&limit=1',r=await fetch(u),d=await r.json();if(!d.length)throw new Error('No se encontro: '+q);return[parseFloat(d[0].lon),parseFloat(d[0].lat)]}
+async function getRoute(f,t,a){let u='https://router.project-osrm.org/route/v1/driving/'+f[0]+','+f[1]+';'+t[0]+','+t[1]+'?overview=full&geometries=geojson';if(a)u+='&exclude=toll';const r=await fetch(u),d=await r.json();if(d.code!=='Ok')throw new Error(d.message);return d.routes[0]}
+function estimateTolls(g){const km=g.coordinates.length*0.5;return Math.min(Math.floor(km*0.15),45)}
+async function calculateRoute(){const o=document.getElementById('origin').value,de=document.getElementById('destination').value,b=document.getElementById('calcBtn'),s=document.getElementById('status'),sc=document.getElementById('sliderContainer');b.disabled=true;s.style.display='block';s.textContent='Geocodificando...';try{routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];const fr=await geocode(o),to=await geocode(de);s.textContent='Calculando rutas...';const[fa,tf]=await Promise.all([getRoute(fr,to,false),getRoute(fr,to,true)]),ft=estimateTolls(fa.geometry);currentRoutes={fastest:{route:fa,tolls:ft,time:fa.duration,dist:fa.distance},tollFree:{route:tf,tolls:0,time:tf.duration,dist:tf.distance}};const sl=document.getElementById('budgetSlider'),mb=Math.ceil(ft);sl.max=mb;sl.value=mb;sl.step=0.5;document.getElementById('budgetValue').textContent=mb+' €';sc.style.display='block';updateBudget(mb);const bo=L.geoJSON(fa.geometry).getBounds();map.fitBounds(bo,{padding:[50,50]})}catch(e){s.innerHTML='<span class="error">❌ '+e.message+'</span>';console.error(e)}finally{b.disabled=false}}
+function updateBudget(v){const b=parseFloat(v);document.getElementById('budgetValue').textContent=b.toFixed(2)+' €';let se;if(b>=currentRoutes.fastest.tolls)se=currentRoutes.fastest;else if(b<=0)se=currentRoutes.tollFree;else{const r=b/currentRoutes.fastest.tolls;se={route:currentRoutes.fastest.route,tolls:b,time:currentRoutes.tollFree.time+(currentRoutes.fastest.time-currentRoutes.tollFree.time)*r,dist:currentRoutes.tollFree.dist+(currentRoutes.fastest.dist-currentRoutes.tollFree.dist)*r}}const m=Math.round(se.time/60),h=Math.floor(m/60),rm=m%60;document.getElementById('timeValue').textContent=h>0?h+'h '+rm+'m':rm+'min';document.getElementById('priceValue').textContent=se.tolls.toFixed(2)+' €';document.getElementById('distValue').textContent=(se.dist/1000).toFixed(1)+' km';routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];const c=se.tolls===0?'#4CAF50':se.tolls>=currentRoutes.fastest.tolls?'#2196F3':'#FF9800';const la=L.geoJSON(se.route.geometry,{style:{color:c,weight:5,opacity:0.8}}).addTo(map);routeLayers.push(la);const co=se.route.geometry.coordinates;routeLayers.push(L.marker([co[0][1],co[0][0]]).addTo(map).bindPopup('A Origen'));routeLayers.push(L.marker([co[co.length-1][1],co[co.length-1][0]]).addTo(map).bindPopup('B Destino'));updateAlternatives()}
+function updateAlternatives(){const c=document.getElementById('alternatives'),f=currentRoutes.fastest,t=currentRoutes.tollFree;let h='';const fm=Math.round(f.time/60),fh=Math.floor(fm/60),fr=fm%60;h+='<div class="alt-card fastest '+(f.tolls<=parseFloat(document.getElementById('budgetSlider').value)?'active':'')+'" onclick="document.getElementById(\'budgetSlider\').value='+f.tolls+';updateBudget('+f.tolls+')">';h+='<div class="alt-time">'+(fh>0?fh+'h '+fr+'m':fr+'min')+'</div><div class="alt-price">'+f.tolls.toFixed(2)+' €</div><div class="alt-label">⚡ Mas rapida</div></div>';const tm=Math.round(t.time/60),th=Math.floor(tm/60),tr=tm%60;h+='<div class="alt-card cheapest '+(parseFloat(document.getElementById('budgetSlider').value)<=0?'active':'')+'" onclick="document.getElementById(\'budgetSlider\').value=0;updateBudget(0)">';h+='<div class="alt-time">'+(th>0?th+'h '+tr+'m':tr+'min')+'</div><div class="alt-price">0 €</div><div class="alt-label">🐢 Sin peajes</div></div>';const sv=Math.round((t.time-f.time)/60);h+='<div class="alt-card" style="background:#f5f5f5;cursor:default"><div class="alt-time" style="color:#666">'+(sv>0?'+'+sv+'min':sv+'min')+'</div><div class="alt-price" style="color:#999">'+f.tolls.toFixed(2)+' €</div><div class="alt-label">💡 Diferencia</div></div>';c.innerHTML=h}
+window.onload=async()=>{initMap();await loadTollData()};
+</script>
+</body>
+</html>
