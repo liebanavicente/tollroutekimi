@@ -3,79 +3,679 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TollRoute — Ruta mas rapida con tu presupuesto</title>
+<title>TollRoute — Ruta más rápida con tu presupuesto</title>
+<meta name="description" content="Calcula la ruta más rápida en coche respetando tu presupuesto máximo de peajes en España.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🛣️%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow:hidden}
-#map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1}
-.bottom-panel{position:absolute;bottom:0;left:0;right:0;background:rgba(255,255,255,0.95);backdrop-filter:blur(10px);border-radius:20px 20px 0 0;padding:20px;z-index:1000;box-shadow:0 -4px 20px rgba(0,0,0,0.15);max-width:600px;margin:0 auto}
-.route-inputs{display:flex;gap:10px;margin-bottom:15px;align-items:center}
-.route-inputs input{flex:1;padding:12px 15px;border:2px solid #e0e0e0;border-radius:12px;font-size:16px;outline:none}
-.route-inputs input:focus{border-color:#2196F3}
-.route-inputs button{padding:12px 24px;background:#2196F3;color:white;border:none;border-radius:12px;font-size:16px;cursor:pointer;font-weight:600}
-.route-inputs button:hover{background:#1976D2}
-.route-inputs button:disabled{background:#ccc;cursor:not-allowed}
-.slider-container{margin:15px 0}
-.slider-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.slider-label span{font-size:14px;color:#666}
-.slider-label strong{font-size:24px;color:#2196F3}
-input[type=range]{width:100%;height:8px;border-radius:4px;background:#e0e0e0;outline:none;-webkit-appearance:none}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#2196F3;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.3)}
-.route-info{background:#f5f5f5;border-radius:12px;padding:15px;margin-top:15px}
-.route-info .main-stats{display:flex;gap:20px;justify-content:center;margin-bottom:10px}
-.stat{text-align:center}
-.stat .value{font-size:28px;font-weight:700;color:#333}
-.stat .label{font-size:12px;color:#888;text-transform:uppercase}
-.alternatives{display:flex;gap:10px;margin-top:12px;overflow-x:auto;padding-bottom:5px}
-.alt-card{flex:0 0 auto;min-width:140px;padding:12px;border-radius:10px;cursor:pointer;text-align:center;border:2px solid transparent;transition:all 0.2s}
-.alt-card:hover{transform:translateY(-2px)}
-.alt-card.active{border-color:#2196F3;background:#e3f2fd}
-.alt-card.fastest{background:#e8f5e9}
-.alt-card.cheapest{background:#fff3e0}
-.alt-card .alt-time{font-size:18px;font-weight:700}
-.alt-card .alt-price{font-size:14px;color:#666;margin-top:4px}
-.alt-card .alt-label{font-size:11px;color:#999;margin-top:4px}
-.loading{text-align:center;color:#666;padding:20px}
-.error{color:#d32f2f;text-align:center;padding:10px}
-@media(max-width:480px){.bottom-panel{padding:15px;border-radius:16px 16px 0 0}.route-inputs{flex-wrap:wrap}.route-inputs input{width:100%}.stat .value{font-size:22px}}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;overflow:hidden;background:#1a1a2e}
+  #map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1}
+  .bottom-panel{position:absolute;bottom:0;left:0;right:0;background:rgba(255,255,255,0.97);backdrop-filter:blur(12px);border-radius:20px 20px 0 0;padding:20px;z-index:1000;box-shadow:0 -4px 24px rgba(0,0,0,0.2);max-width:640px;margin:0 auto;transition:transform .3s ease}
+  .route-inputs{display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+  .route-inputs input{flex:1;min-width:120px;padding:12px 15px;border:2px solid #e0e0e0;border-radius:12px;font-size:16px;outline:none;transition:border-color .2s}
+  .route-inputs input:focus{border-color:#2196F3}
+  .route-inputs .arrow{font-size:22px;color:#888;flex-shrink:0}
+  .route-inputs button{padding:12px 24px;background:linear-gradient(135deg,#2196F3,#1976D2);color:white;border:none;border-radius:12px;font-size:16px;cursor:pointer;font-weight:600;flex-shrink:0;transition:all .2s}
+  .route-inputs button:hover{background:linear-gradient(135deg,#1976D2,#1565C0);transform:translateY(-1px)}
+  .route-inputs button:disabled{background:#ccc;cursor:not-allowed;transform:none}
+  .slider-container{margin:12px 0;opacity:0;transform:translateY(10px);transition:all .3s ease}
+  .slider-container.visible{opacity:1;transform:translateY(0)}
+  .slider-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .slider-label span{font-size:14px;color:#666;font-weight:500}
+  .slider-label strong{font-size:26px;color:#2196F3;font-weight:700}
+  input[type=range]{width:100%;height:8px;border-radius:4px;background:#e0e0e0;outline:none;-webkit-appearance:none;cursor:pointer}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#2196F3,#1976D2);cursor:pointer;box-shadow:0 2px 8px rgba(33,150,243,0.4);transition:transform .15s}
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15)}
+  input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#2196F3,#1976D2);cursor:pointer;border:none;box-shadow:0 2px 8px rgba(33,150,243,0.4)}
+  .route-info{background:#f8f9fa;border-radius:14px;padding:16px;margin-top:14px;opacity:0;transform:translateY(10px);transition:all .3s ease}
+  .route-info.visible{opacity:1;transform:translateY(0)}
+  .route-info .main-stats{display:flex;gap:16px;justify-content:center;margin-bottom:10px}
+  .stat{text-align:center;flex:1}
+  .stat .value{font-size:28px;font-weight:800;color:#1a1a2e}
+  .stat .label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+  .stat .value.saving{color:#4CAF50}
+  .stat .value.warning{color:#FF9800}
+  .alternatives{display:flex;gap:10px;margin-top:12px;overflow-x:auto;padding-bottom:5px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+  .alt-card{flex:0 0 auto;min-width:140px;padding:14px;border-radius:12px;cursor:pointer;text-align:center;border:2px solid transparent;transition:all .2s;scroll-snap-align:start;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+  .alt-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.12)}
+  .alt-card.active{border-color:#2196F3;background:#e3f2fd}
+  .alt-card.fastest{background:#e8f5e9;border-color:#4CAF50}
+  .alt-card.cheapest{background:#fff3e0;border-color:#FF9800}
+  .alt-card .alt-time{font-size:18px;font-weight:700;color:#1a1a2e}
+  .alt-card .alt-price{font-size:14px;color:#666;margin-top:4px;font-weight:500}
+  .alt-card .alt-label{font-size:11px;color:#999;margin-top:4px}
+  .alt-card .alt-badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(0,0,0,0.06);color:#666;margin-top:6px;font-weight:600}
+  .loading{text-align:center;color:#666;padding:16px;font-size:15px}
+  .error{color:#d32f2f;text-align:center;padding:12px;background:#ffebee;border-radius:10px;margin-top:8px;font-size:14px}
+  .info-banner{text-align:center;padding:8px 12px;background:#e3f2fd;border-radius:8px;margin-bottom:10px;font-size:13px;color:#1565C0;display:none}
+  .info-banner.visible{display:block}
+  .swipe-hint{text-align:center;font-size:12px;color:#aaa;margin-top:4px;display:none}
+  @media(max-width:480px){
+    .bottom-panel{padding:16px 14px;border-radius:16px 16px 0 0}
+    .route-inputs{flex-wrap:wrap}
+    .route-inputs input{width:100%;flex:none}
+    .route-inputs .arrow{display:none}
+    .stat .value{font-size:22px}
+    .swipe-hint{display:block}
+  }
+  /* Leaflet popup styling */
+  .leaflet-popup-content-wrapper{border-radius:12px}
+  .leaflet-popup-content{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;margin:10px 14px}
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div class="bottom-panel">
-<div class="route-inputs">
-<input type="text" id="origin" placeholder="Origen (ej: Madrid)" value="Madrid">
-<span style="font-size:20px">→</span>
-<input type="text" id="destination" placeholder="Destino (ej: Barcelona)" value="Barcelona">
-<button onclick="calculateRoute()" id="calcBtn">Calcular</button>
+  <div class="info-banner" id="infoBanner">
+    💡 Desliza el slider para ajustar tu presupuesto de peajes y ver cómo cambia la ruta óptima.
+  </div>
+  <div class="route-inputs">
+    <input type="text" id="origin" placeholder="Origen (ej: Madrid)" value="Madrid" autocomplete="off">
+    <span class="arrow">→</span>
+    <input type="text" id="destination" placeholder="Destino (ej: Barcelona)" value="Barcelona" autocomplete="off">
+    <button onclick="calculateRoute()" id="calcBtn">Calcular</button>
+  </div>
+  <div class="slider-container" id="sliderContainer">
+    <div class="slider-label"><span>Máximo en peajes</span><strong id="budgetValue">0 €</strong></div>
+    <input type="range" id="budgetSlider" min="0" max="100" value="0" step="0.5" oninput="updateBudget(this.value)">
+    <div class="route-info" id="routeInfo">
+      <div class="main-stats">
+        <div class="stat"><div class="value" id="timeValue">--</div><div class="label">Tiempo</div></div>
+        <div class="stat"><div class="value" id="priceValue">--</div><div class="label">Peajes</div></div>
+        <div class="stat"><div class="value" id="distValue">--</div><div class="label">Distancia</div></div>
+      </div>
+      <div class="alternatives" id="alternatives"></div>
+      <div class="swipe-hint">← Desliza para ver más opciones →</div>
+    </div>
+  </div>
+  <div id="status" class="loading" style="display:none">Calculando ruta...</div>
 </div>
-<div class="slider-container" id="sliderContainer" style="display:none">
-<div class="slider-label"><span>Maximo en peajes</span><strong id="budgetValue">0 €</strong></div>
-<input type="range" id="budgetSlider" min="0" max="100" value="0" step="0.5" oninput="updateBudget(this.value)">
-<div class="route-info" id="routeInfo">
-<div class="main-stats">
-<div class="stat"><div class="value" id="timeValue">--</div><div class="label">Tiempo</div></div>
-<div class="stat"><div class="value" id="priceValue">--</div><div class="label">Peajes</div></div>
-<div class="stat"><div class="value" id="distValue">--</div><div class="label">Distancia</div></div>
-</div>
-<div class="alternatives" id="alternatives"></div>
-</div>
-</div>
-<div id="status" class="loading" style="display:none">Calculando ruta...</div>
-</div>
+
 <script>
-let tollData=null,currentRoutes={},map,routeLayers=[];
-async function loadTollData(){try{const r=await fetch('spain_tolls.json');tollData=await r.json();console.log('Cargados '+tollData.metadata.total_segments+' segmentos')}catch(e){console.warn('Usando datos de muestra');tollData={networks:[{road_id:'AP-7',segments:[{entry_point:'Barcelona',exit_point:'Valencia',rates:{light:22.3}}]}]}}}
-function initMap(){map=L.map('map').setView([40.4168,-3.7038],6);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18}).addTo(map)}
-async function geocode(q){const u='https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(q+', Espana')+'&limit=1',r=await fetch(u),d=await r.json();if(!d.length)throw new Error('No se encontro: '+q);return[parseFloat(d[0].lon),parseFloat(d[0].lat)]}
-async function getRoute(f,t,a){let u='https://router.project-osrm.org/route/v1/driving/'+f[0]+','+f[1]+';'+t[0]+','+t[1]+'?overview=full&geometries=geojson';if(a)u+='&exclude=toll';const r=await fetch(u),d=await r.json();if(d.code!=='Ok')throw new Error(d.message);return d.routes[0]}
-function estimateTolls(g){const km=g.coordinates.length*0.5;return Math.min(Math.floor(km*0.15),45)}
-async function calculateRoute(){const o=document.getElementById('origin').value,de=document.getElementById('destination').value,b=document.getElementById('calcBtn'),s=document.getElementById('status'),sc=document.getElementById('sliderContainer');b.disabled=true;s.style.display='block';s.textContent='Geocodificando...';try{routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];const fr=await geocode(o),to=await geocode(de);s.textContent='Calculando rutas...';const[fa,tf]=await Promise.all([getRoute(fr,to,false),getRoute(fr,to,true)]),ft=estimateTolls(fa.geometry);currentRoutes={fastest:{route:fa,tolls:ft,time:fa.duration,dist:fa.distance},tollFree:{route:tf,tolls:0,time:tf.duration,dist:tf.distance}};const sl=document.getElementById('budgetSlider'),mb=Math.ceil(ft);sl.max=mb;sl.value=mb;sl.step=0.5;document.getElementById('budgetValue').textContent=mb+' €';sc.style.display='block';updateBudget(mb);const bo=L.geoJSON(fa.geometry).getBounds();map.fitBounds(bo,{padding:[50,50]})}catch(e){s.innerHTML='<span class="error">❌ '+e.message+'</span>';console.error(e)}finally{b.disabled=false}}
-function updateBudget(v){const b=parseFloat(v);document.getElementById('budgetValue').textContent=b.toFixed(2)+' €';let se;if(b>=currentRoutes.fastest.tolls)se=currentRoutes.fastest;else if(b<=0)se=currentRoutes.tollFree;else{const r=b/currentRoutes.fastest.tolls;se={route:currentRoutes.fastest.route,tolls:b,time:currentRoutes.tollFree.time+(currentRoutes.fastest.time-currentRoutes.tollFree.time)*r,dist:currentRoutes.tollFree.dist+(currentRoutes.fastest.dist-currentRoutes.tollFree.dist)*r}}const m=Math.round(se.time/60),h=Math.floor(m/60),rm=m%60;document.getElementById('timeValue').textContent=h>0?h+'h '+rm+'m':rm+'min';document.getElementById('priceValue').textContent=se.tolls.toFixed(2)+' €';document.getElementById('distValue').textContent=(se.dist/1000).toFixed(1)+' km';routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];const c=se.tolls===0?'#4CAF50':se.tolls>=currentRoutes.fastest.tolls?'#2196F3':'#FF9800';const la=L.geoJSON(se.route.geometry,{style:{color:c,weight:5,opacity:0.8}}).addTo(map);routeLayers.push(la);const co=se.route.geometry.coordinates;routeLayers.push(L.marker([co[0][1],co[0][0]]).addTo(map).bindPopup('A Origen'));routeLayers.push(L.marker([co[co.length-1][1],co[co.length-1][0]]).addTo(map).bindPopup('B Destino'));updateAlternatives()}
-function updateAlternatives(){const c=document.getElementById('alternatives'),f=currentRoutes.fastest,t=currentRoutes.tollFree;let h='';const fm=Math.round(f.time/60),fh=Math.floor(fm/60),fr=fm%60;h+='<div class="alt-card fastest '+(f.tolls<=parseFloat(document.getElementById('budgetSlider').value)?'active':'')+'" onclick="document.getElementById(\'budgetSlider\').value='+f.tolls+';updateBudget('+f.tolls+')">';h+='<div class="alt-time">'+(fh>0?fh+'h '+fr+'m':fr+'min')+'</div><div class="alt-price">'+f.tolls.toFixed(2)+' €</div><div class="alt-label">⚡ Mas rapida</div></div>';const tm=Math.round(t.time/60),th=Math.floor(tm/60),tr=tm%60;h+='<div class="alt-card cheapest '+(parseFloat(document.getElementById('budgetSlider').value)<=0?'active':'')+'" onclick="document.getElementById(\'budgetSlider\').value=0;updateBudget(0)">';h+='<div class="alt-time">'+(th>0?th+'h '+tr+'m':tr+'min')+'</div><div class="alt-price">0 €</div><div class="alt-label">🐢 Sin peajes</div></div>';const sv=Math.round((t.time-f.time)/60);h+='<div class="alt-card" style="background:#f5f5f5;cursor:default"><div class="alt-time" style="color:#666">'+(sv>0?'+'+sv+'min':sv+'min')+'</div><div class="alt-price" style="color:#999">'+f.tolls.toFixed(2)+' €</div><div class="alt-label">💡 Diferencia</div></div>';c.innerHTML=h}
-window.onload=async()=>{initMap();await loadTollData()};
+// ============================================================
+// TollRoute — Configuración y datos precargados
+// ============================================================
+
+// Coordenadas precargadas de estaciones de peaje principales (aproximadas)
+const PRELOADED_STATION_COORDS = {
+  'Madrid': [-3.7038, 40.4168],
+  'Barcelona': [2.1734, 41.3851],
+  'Valencia': [-0.3763, 39.4699],
+  'Sevilla': [-5.9845, 37.3891],
+  'A Coruña': [-8.4115, 43.3623],
+  'Santiago': [-8.5448, 42.8782],
+  'Vigo': [-8.7207, 42.2406],
+  'Pontevedra': [-8.6444, 42.4310],
+  'Toledo': [-4.0273, 39.8628],
+  'Guadalajara': [-3.1625, 40.6293],
+  'Aranjuez': [-3.6025, 40.0310],
+  'Pinto': [-3.6995, 40.2415],
+  'Parla': [-3.7733, 40.2350],
+  'Valdemoro': [-3.6788, 40.1907],
+  'Seseña': [-3.6995, 40.1047],
+  'Ocaña': [-3.4982, 39.9594],
+  'Quintanar de la Orden': [-3.0445, 39.5885],
+  'Quintanar Orden': [-3.0445, 39.5885],
+  'Mota del Cuervo': [-2.8687, 39.5016],
+  'Mota Cuervo': [-2.8687, 39.5016],
+  'Las Pedroñeras': [-2.6735, 39.4497],
+  'Pedernoso': [-2.6735, 39.4497],
+  'San Clemente': [-2.5714, 39.4036],
+  'Villaluenga': [-2.0059, 39.1785],
+  'Tarancón': [-3.0121, 40.0085],
+  'NII-Taracena': [-3.0121, 40.0085],
+  'Cartagena': [-0.9963, 37.6056],
+  'Mazarrón': [-1.3149, 37.5992],
+  'Mazarrón Las Palas': [-1.3149, 37.5992],
+  'Las Palas': [-1.3149, 37.5992],
+  'Águilas': [-1.5829, 37.4043],
+  'Pulpí': [-1.7454, 37.4012],
+  'Vera': [-1.8656, 37.2467],
+  'Cabo Cope': [-1.5500, 37.2667],
+  'Cuevas del Almanzora': [-1.8823, 37.2965],
+  'Lorca': [-1.6988, 37.6717],
+  // Galicia - AP-9
+  'Fene': [-8.1667, 43.4667],
+  'Cabanas': [-8.1667, 43.4167],
+  'Miño': [-8.2000, 43.3500],
+  'Guísamo': [-8.2833, 43.3167],
+  'Ordes': [-8.4000, 43.0667],
+  'Sigüeiro': [-8.4333, 43.0000],
+  'Macenda': [-8.3500, 43.0000],
+  'Padrón': [-8.6500, 42.7333],
+  'Caldas': [-8.6333, 42.6000],
+  'Curro': [-8.6667, 42.5500],
+  'Rande': [-8.6333, 42.2833],
+  'O Morrazo': [-8.7000, 42.2667],
+  'Vilaboa': [-8.6333, 42.3667],
+  'Nigrán': [-8.8167, 42.1500],
+  'Baiona': [-8.8500, 42.1167],
+  'Gondomar': [-8.7667, 42.1167],
+  'Tui': [-8.6500, 42.0500],
+  'Vincios': [-8.8000, 42.1833],
+  'Puxeiros': [-8.6167, 42.1667],
+  'O Porriño': [-8.6167, 42.1667],
+  'Arteixo': [-8.5000, 43.3000],
+  'Carballo': [-8.6833, 43.2167],
+  'Laracha': [-8.5833, 43.2500],
+  'Paiosaco': [-8.6667, 43.3000],
+  // Galicia - AP-53
+  'Ribadulla': [-8.6000, 42.9167],
+  'Bandeira': [-8.3167, 42.8333],
+  'Silleda': [-8.2500, 42.7000],
+  'Lalín Oeste': [-8.1167, 42.6667],
+  'Lalín Centro': [-8.1000, 42.6667],
+  'Lalín Este': [-8.0833, 42.6667],
+  'Alto Santo Domingo': [-8.0500, 42.6500],
+  // Madrid peajes
+  'Alcalá': [-3.3667, 40.4833],
+  'Alcala': [-3.3667, 40.4833],
+  'Cabanillas': [-3.2333, 40.6333],
+  'Ajalvir': [-3.4833, 40.5333],
+  'Illescas': [-3.9167, 40.1167],
+  'Peaje Barajas': [-3.5667, 40.4833],
+  'Peaje Alcobendas': [-3.6333, 40.5333],
+  'Meco': [-3.3333, 40.5500],
+  'R5': [-4.0500, 40.1500],
+  // AP-7 Levante
+  'Villaseca': [-1.0000, 37.6500],
+  'Villaseca Sagra (CM 4001)': [-3.9667, 39.9500],
+  'Villaseca Sagra (CM\n4001)': [-3.9667, 39.9500],
+  'Serranillos': [-3.9333, 40.2833],
+  'Ramonete': [-1.8333, 37.3500],
+  'Lateral Corral Almaguer': [-2.8667, 39.5000],
+  'Troncal Corral Almaguer': [-2.8667, 39.5000],
+  'Troncal San Clemente': [-2.5714, 39.4036],
+  'Numancia': [-3.0333, 40.0167],
+  // Otros
+  'Ontígola': [-3.6000, 40.0167],
+  'Ontigola': [-3.6000, 40.0167],
+  'Pinto-Parla': [-3.7333, 40.2333],
+  'A-3 Conexión': [-3.5167, 40.3333],
+  'Conexión A-3': [-3.5167, 40.3333],
+  'A-5 Conexión': [-3.7333, 40.2333],
+  'Conexión A-5': [-3.7333, 40.2333],
+  'M-40 / M-45': [-3.6167, 40.4000],
+  'M-45': [-3.5500, 40.4333],
+  'M-50': [-3.7833, 40.3500],
+  'M-50 / M-506 Móstoles/Fuenlabrada': [-3.8000, 40.3167],
+  'M-50/M-506': [-3.8000, 40.3167],
+  'M-50/M-506\nMóstoles\nFuenlabrada': [-3.8000, 40.3167],
+  'M-208': [-3.4000, 40.5333],
+  'M-208\nMejorada\nVelilla': [-3.4000, 40.5333],
+  'M-208 Mejorada/Velilla': [-3.4000, 40.5333],
+  'M-300': [-3.4500, 40.3667],
+  'M-300\nArganda\nLoeches': [-3.4500, 40.3667],
+  'M-300 Arganda/Loeches': [-3.4500, 40.3667],
+  'M-404': [-4.0667, 40.2333],
+  'M-404\nEl Álamo\nNavalcarnero': [-4.0667, 40.2333],
+  'M-404 El Álamo/Navalcarnero': [-4.0667, 40.2333],
+  'M-413': [-3.9167, 40.2667],
+  'M-413\nArroyomolinos\nMoraleja': [-3.9167, 40.2667],
+  'M-413 Arroyomolinos/Moraleja': [-3.9167, 40.2667],
+  'Madrid\nM-40\nM-602': [-3.5667, 40.4833],
+  'Madrid / M-40 / M-602': [-3.5667, 40.4833],
+  'AP-41 Mad. Toledo': [-3.8500, 40.1000],
+  'AP-41 Madrid-Toledo': [-3.8500, 40.1000],
+};
+
+const CACHE_KEY = 'tollroute_station_coords';
+const CACHE_TTL_DAYS = 30;
+
+let tollData = null;
+let stationCoords = {}; // name -> [lon, lat]
+let currentRoutes = {};
+let map, routeLayers = [];
+let isGeocodingStations = false;
+
+// ============================================================
+// Utilidades
+// ============================================================
+
+function haversine(lon1, lat1, lon2, lat2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function loadCachedCoords() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return;
+    const cached = JSON.parse(raw);
+    const now = Date.now();
+    for (const [name, entry] of Object.entries(cached)) {
+      if (now - entry.ts < CACHE_TTL_DAYS * 86400000) {
+        stationCoords[name] = entry.coord;
+      }
+    }
+  } catch(e) {}
+}
+
+function saveCachedCoords() {
+  try {
+    const payload = {};
+    for (const [name, coord] of Object.entries(stationCoords)) {
+      payload[name] = { coord, ts: Date.now() };
+    }
+    localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
+  } catch(e) {}
+}
+
+// ============================================================
+// Carga de datos de peajes
+// ============================================================
+
+async function loadTollData() {
+  try {
+    const r = await fetch('spain_tolls.json');
+    tollData = await r.json();
+    console.log('Cargados', tollData.metadata?.total_segments || '?', 'segmentos de peaje');
+
+    // Cargar coordenadas cacheadas
+    loadCachedCoords();
+
+    // Precargar coordenadas conocidas
+    for (const [name, coord] of Object.entries(PRELOADED_STATION_COORDS)) {
+      if (!stationCoords[name]) stationCoords[name] = coord;
+    }
+
+    // Geocodificar estaciones faltantes en background
+    geocodeMissingStations();
+
+  } catch(e) {
+    console.warn('Error cargando peajes:', e);
+    tollData = { networks: [], metadata: {} };
+  }
+}
+
+async function geocodeMissingStations() {
+  if (isGeocodingStations || !tollData?.networks) return;
+  isGeocodingStations = true;
+
+  const missing = new Set();
+  for (const net of tollData.networks) {
+    for (const s of net.stations || []) {
+      const name = s.name;
+      if (name && !stationCoords[name]) missing.add(name);
+    }
+  }
+
+  const missingArr = Array.from(missing);
+  console.log('Geocodificando', missingArr.length, 'estaciones...');
+
+  for (let i = 0; i < missingArr.length; i++) {
+    const name = missingArr[i];
+    try {
+      const coord = await geocodeStation(name);
+      if (coord) {
+        stationCoords[name] = coord;
+        saveCachedCoords();
+      }
+    } catch(e) {}
+    // Rate limit: esperar 600ms entre peticiones
+    if (i < missingArr.length - 1) await new Promise(r => setTimeout(r, 600));
+  }
+
+  isGeocodingStations = false;
+  console.log('Geocodificación completada');
+}
+
+async function geocodeStation(name) {
+  const q = encodeURIComponent(name + ', España');
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1`;
+  const r = await fetch(url);
+  const d = await r.json();
+  if (d && d.length > 0) {
+    return [parseFloat(d[0].lon), parseFloat(d[0].lat)];
+  }
+  return null;
+}
+
+// ============================================================
+// Mapa
+// ============================================================
+
+function initMap() {
+  map = L.map('map', { zoomControl: false }).setView([40.4168, -3.7038], 6);
+  L.control.zoom({ position: 'topright' }).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+    maxZoom: 18
+  }).addTo(map);
+
+  window.addEventListener('resize', () => {
+    setTimeout(() => map.invalidateSize(), 100);
+  });
+}
+
+// ============================================================
+// Geocodificación de origen/destino
+// ============================================================
+
+async function geocode(q) {
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q + ', España') + '&limit=1';
+  const r = await fetch(url);
+  const d = await r.json();
+  if (!d || !d.length) throw new Error('No se encontró: ' + q);
+  return [parseFloat(d[0].lon), parseFloat(d[0].lat)];
+}
+
+// ============================================================
+// Routing con OSRM
+// ============================================================
+
+async function getRoute(from, to, avoidTolls) {
+  let url = `https://router.project-osrm.org/route/v1/driving/${from[0]},${from[1]};${to[0]},${to[1]}?overview=full&geometries=geojson`;
+  if (avoidTolls) url += '&exclude=toll';
+  const r = await fetch(url);
+  const d = await r.json();
+  if (d.code !== 'Ok') throw new Error(d.message || 'Error calculando ruta');
+  return d.routes[0];
+}
+
+// ============================================================
+// Cálculo de peajes con matching espacial
+// ============================================================
+
+function calculateTolls(geometry) {
+  if (!tollData?.networks || !geometry?.coordinates) {
+    return { total: estimateTolls(geometry), method: 'heuristic' };
+  }
+
+  const coords = geometry.coordinates;
+  let totalTolls = 0;
+  let matchedSegments = 0;
+
+  // Para cada red de peajes
+  for (const network of tollData.networks) {
+    // Indexar estaciones por nombre
+    const stationMap = {};
+    for (const s of network.stations || []) {
+      if (s.name && stationCoords[s.name]) {
+        stationMap[s.name] = stationCoords[s.name];
+      }
+    }
+
+    // Para cada segmento, verificar si la ruta pasa por entry y exit
+    for (const seg of network.segments || []) {
+      const entryCoord = stationMap[seg.entry_point];
+      const exitCoord = stationMap[seg.exit_point];
+      if (!entryCoord || !exitCoord) continue;
+
+      // Verificar si la ruta pasa cerca de ambas estaciones
+      const nearEntry = isPointNearRoute(coords, entryCoord);
+      const nearExit = isPointNearRoute(coords, exitCoord);
+
+      if (nearEntry && nearExit) {
+        const rate = seg.rates?.light || seg.rates?.heavy_1 || 0;
+        totalTolls += rate;
+        matchedSegments++;
+      }
+    }
+  }
+
+  // Si no hemos matchado nada, usar heurística
+  if (matchedSegments === 0) {
+    return { total: estimateTolls(geometry), method: 'heuristic' };
+  }
+
+  return { total: Math.round(totalTolls * 100) / 100, method: 'real', matchedSegments };
+}
+
+function isPointNearRoute(routeCoords, point, thresholdKm = 3.0) {
+  // Buscar la distancia mínima del punto a cualquier punto de la ruta
+  // Muestreo: verificar cada 5 puntos para eficiencia
+  for (let i = 0; i < routeCoords.length; i += 5) {
+    const rc = routeCoords[i];
+    const dist = haversine(rc[0], rc[1], point[0], point[1]);
+    if (dist <= thresholdKm) return true;
+  }
+  // Verificar también el último punto
+  const last = routeCoords[routeCoords.length - 1];
+  if (haversine(last[0], last[1], point[0], point[1]) <= thresholdKm) return true;
+  return false;
+}
+
+function estimateTolls(geometry) {
+  if (!geometry?.coordinates) return 0;
+  // Estimación: cada punto de coordenada ~ 500m, tarifa media ~0.10€/km en autopistas de peaje
+  const km = geometry.coordinates.length * 0.5;
+  return Math.min(Math.round(km * 0.10 * 100) / 100, 60);
+}
+
+// ============================================================
+// Cálculo principal de ruta
+// ============================================================
+
+async function calculateRoute() {
+  const origin = document.getElementById('origin').value.trim();
+  const dest = document.getElementById('destination').value.trim();
+  const btn = document.getElementById('calcBtn');
+  const status = document.getElementById('status');
+  const sliderContainer = document.getElementById('sliderContainer');
+  const routeInfo = document.getElementById('routeInfo');
+  const infoBanner = document.getElementById('infoBanner');
+
+  if (!origin || !dest) {
+    status.style.display = 'block';
+    status.innerHTML = '<span class="error">❌ Introduce origen y destino</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  status.style.display = 'block';
+  status.textContent = 'Geocodificando...';
+  sliderContainer.classList.remove('visible');
+  routeInfo.classList.remove('visible');
+  infoBanner.classList.remove('visible');
+
+  try {
+    // Limpiar capas anteriores
+    routeLayers.forEach(l => map.removeLayer(l));
+    routeLayers = [];
+
+    const from = await geocode(origin);
+    const to = await geocode(dest);
+
+    status.textContent = 'Calculando rutas...';
+
+    // Obtener ruta rápida (con peajes) y sin peajes en paralelo
+    const [fastRoute, tollFreeRoute] = await Promise.all([
+      getRoute(from, to, false),
+      getRoute(from, to, true)
+    ]);
+
+    // Calcular peajes reales
+    const fastTolls = calculateTolls(fastRoute.geometry);
+    const tfTolls = calculateTolls(tollFreeRoute.geometry);
+
+    currentRoutes = {
+      fastest: {
+        route: fastRoute,
+        tolls: fastTolls.total,
+        tollMethod: fastTolls.method,
+        time: fastRoute.duration,
+        dist: fastRoute.distance
+      },
+      tollFree: {
+        route: tollFreeRoute,
+        tolls: tfTolls.total,
+        tollMethod: tfTolls.method,
+        time: tollFreeRoute.duration,
+        dist: tollFreeRoute.distance
+      }
+    };
+
+    const slider = document.getElementById('budgetSlider');
+    const maxBudget = Math.ceil(fastTolls.total);
+    slider.max = Math.max(maxBudget, 1);
+    slider.value = maxBudget;
+    slider.step = 0.5;
+    document.getElementById('budgetValue').textContent = maxBudget.toFixed(2) + ' €';
+
+    sliderContainer.classList.add('visible');
+    routeInfo.classList.add('visible');
+    infoBanner.classList.add('visible');
+
+    updateBudget(maxBudget);
+
+    // Ajustar mapa a la ruta
+    const bounds = L.geoJSON(fastRoute.geometry).getBounds();
+    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
+
+  } catch (e) {
+    status.innerHTML = '<span class="error">❌ ' + (e.message || 'Error desconocido') + '</span>';
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ============================================================
+// Actualizar UI según presupuesto
+// ============================================================
+
+function updateBudget(value) {
+  const budget = parseFloat(value);
+  document.getElementById('budgetValue').textContent = budget.toFixed(2) + ' €';
+
+  const f = currentRoutes.fastest;
+  const t = currentRoutes.tollFree;
+
+  if (!f || !t) return;
+
+  let selected;
+
+  if (budget >= f.tolls) {
+    selected = f;
+  } else if (budget <= 0) {
+    selected = t;
+  } else {
+    // Interpolar entre ruta sin peajes y ruta rápida
+    const ratio = Math.min(budget / f.tolls, 1);
+    selected = {
+      route: f.route,
+      tolls: budget,
+      time: t.time + (f.time - t.time) * ratio,
+      dist: t.dist + (f.dist - t.dist) * ratio
+    };
+  }
+
+  // Actualizar stats
+  const totalMinutes = Math.round(selected.time / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  document.getElementById('timeValue').textContent = hours > 0 ? hours + 'h ' + mins + 'm' : mins + ' min';
+  document.getElementById('priceValue').textContent = selected.tolls.toFixed(2) + ' €';
+  document.getElementById('distValue').textContent = (selected.dist / 1000).toFixed(1) + ' km';
+
+  // Color del precio según ahorro
+  const priceEl = document.getElementById('priceValue');
+  priceEl.className = 'value' + (selected.tolls === 0 ? ' saving' : selected.tolls < f.tolls * 0.5 ? ' warning' : '');
+
+  // Renderizar ruta en mapa
+  renderRoute(selected, f.tolls);
+  updateAlternatives();
+}
+
+function renderRoute(selected, maxTolls) {
+  routeLayers.forEach(l => map.removeLayer(l));
+  routeLayers = [];
+
+  const color = selected.tolls === 0 ? '#4CAF50' : selected.tolls >= maxTolls ? '#2196F3' : '#FF9800';
+
+  const line = L.geoJSON(selected.route.geometry, {
+    style: { color: color, weight: 5, opacity: 0.85, lineJoin: 'round' }
+  }).addTo(map);
+  routeLayers.push(line);
+
+  const coords = selected.route.geometry.coordinates;
+  if (coords && coords.length > 0) {
+    const start = L.marker([coords[0][1], coords[0][0]], {
+      icon: L.divIcon({
+        className: 'custom-marker',
+        html: '<div style="background:#4CAF50;width:14px;height:14px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>',
+        iconSize: [20, 20], iconAnchor: [10, 10]
+      })
+    }).addTo(map).bindPopup('<b>A</b> Origen');
+    routeLayers.push(start);
+
+    const end = L.marker([coords[coords.length - 1][1], coords[coords.length - 1][0]], {
+      icon: L.divIcon({
+        className: 'custom-marker',
+        html: '<div style="background:#f44336;width:14px;height:14px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>',
+        iconSize: [20, 20], iconAnchor: [10, 10]
+      })
+    }).addTo(map).bindPopup('<b>B</b> Destino');
+    routeLayers.push(end);
+  }
+}
+
+function updateAlternatives() {
+  const container = document.getElementById('alternatives');
+  const f = currentRoutes.fastest;
+  const t = currentRoutes.tollFree;
+  const sliderVal = parseFloat(document.getElementById('budgetSlider').value);
+
+  if (!f || !t) return;
+
+  let html = '';
+
+  // Ruta más rápida
+  const fm = Math.round(f.time / 60);
+  const fh = Math.floor(fm / 60);
+  const fr = fm % 60;
+  const isFastActive = f.tolls <= sliderVal;
+  html += `<div class="alt-card fastest ${isFastActive ? 'active' : ''}" onclick="document.getElementById('budgetSlider').value=${f.tolls};updateBudget(${f.tolls})">`;
+  html += `<div class="alt-time">${fh > 0 ? fh + 'h ' + fr + 'm' : fr + ' min'}</div>`;
+  html += `<div class="alt-price">${f.tolls.toFixed(2)} €</div>`;
+  html += `<div class="alt-label">⚡ Más rápida</div>`;
+  if (f.tollMethod === 'real') html += `<div class="alt-badge">Datos reales</div>`;
+  html += `</div>`;
+
+  // Ruta sin peajes
+  const tm = Math.round(t.time / 60);
+  const th = Math.floor(tm / 60);
+  const tr = tm % 60;
+  const isFreeActive = sliderVal <= 0;
+  html += `<div class="alt-card cheapest ${isFreeActive ? 'active' : ''}" onclick="document.getElementById('budgetSlider').value=0;updateBudget(0)">`;
+  html += `<div class="alt-time">${th > 0 ? th + 'h ' + tr + 'm' : tr + ' min'}</div>`;
+  html += `<div class="alt-price">0 €</div>`;
+  html += `<div class="alt-label">🐢 Sin peajes</div>`;
+  html += `</div>`;
+
+  // Diferencia
+  const diffMin = Math.round((t.time - f.time) / 60);
+  const diffSign = diffMin > 0 ? '+' : '';
+  html += `<div class="alt-card" style="background:#f5f5f5;cursor:default">`;
+  html += `<div class="alt-time" style="color:#666">${diffSign}${diffMin} min</div>`;
+  html += `<div class="alt-price" style="color:#999">${f.tolls.toFixed(2)} €</div>`;
+  html += `<div class="alt-label">💡 Diferencia</div>`;
+  html += `</div>`;
+
+  container.innerHTML = html;
+}
+
+// ============================================================
+// Inicialización
+// ============================================================
+
+window.onload = async () => {
+  initMap();
+  await loadTollData();
+};
+
+// Enter en inputs para calcular
+['origin', 'destination'].forEach(id => {
+  document.getElementById(id)?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') calculateRoute();
+  });
+});
 </script>
 </body>
 </html>
