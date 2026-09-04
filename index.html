@@ -374,7 +374,13 @@ async function getRoute(from, to, avoidTolls) {
   if (avoidTolls) url += '&exclude=toll';
   const r = await fetch(url);
   const d = await r.json();
-  if (d.code !== 'Ok') throw new Error(d.message || 'Error calculando ruta');
+  if (d.code !== 'Ok') {
+    // Si el error es por exclude no soportado, devolver null para que el caller lo maneje
+    if (d.message && d.message.includes('Exclude flag combination is not supported')) {
+      return null;
+    }
+    throw new Error(d.message || 'Error calculando ruta');
+  }
   return d.routes[0];
 }
 
@@ -485,10 +491,21 @@ async function calculateRoute() {
     status.textContent = 'Calculando rutas...';
 
     // Obtener ruta rápida (con peajes) y sin peajes en paralelo
-    const [fastRoute, tollFreeRoute] = await Promise.all([
-      getRoute(from, to, false),
-      getRoute(from, to, true)
-    ]);
+    const fastRoute = await getRoute(from, to, false);
+    if (!fastRoute) throw new Error('No se pudo calcular la ruta');
+
+    let tollFreeRoute = await getRoute(from, to, true);
+    let tollFreeEstimated = false;
+    if (!tollFreeRoute) {
+      // OSRM no soporta exclude=toll en esta región → estimar alternativa sin peajes
+      tollFreeRoute = {
+        geometry: fastRoute.geometry,
+        duration: fastRoute.duration * 1.25,
+        distance: fastRoute.distance * 1.15,
+        legs: fastRoute.legs
+      };
+      tollFreeEstimated = true;
+    }
 
     // Calcular peajes reales
     const fastTolls = calculateTolls(fastRoute.geometry);
