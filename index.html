@@ -27,8 +27,10 @@
   .route-tab{flex:1;padding:10px 8px;border-radius:10px;border:2px solid #e0e0e0;background:#fff;cursor:pointer;font-size:13px;font-weight:600;text-align:center;transition:all .2s}
   .route-tab:hover{border-color:#2196F3}
   .route-tab.active{border-color:#2196F3;background:#e3f2fd;color:#1565C0}
+  .route-tab.active.tollfree{border-color:#4CAF50;background:#e8f5e9;color:#2e7d32}
   .route-tab .tab-price{font-size:11px;color:#888;font-weight:500}
   .route-tab.active .tab-price{color:#1565C0}
+  .route-tab.active.tollfree .tab-price{color:#2e7d32}
   .main-stats{display:flex;gap:16px;justify-content:center;margin-bottom:12px}
   .stat{text-align:center;flex:1}
   .stat .value{font-size:26px;font-weight:800;color:#1a1a2e}
@@ -57,6 +59,17 @@
   .error{color:#d32f2f;text-align:center;padding:12px;background:#ffebee;border-radius:10px;margin-top:8px;font-size:14px}
   .no-tolls{text-align:center;padding:20px;color:#666;font-size:14px}
   .hint-text{font-size:12px;color:#999;text-align:center;margin-top:8px}
+  /* Instructions panel */
+  .instructions{margin-top:14px;border-top:1px solid #e0e0e0;padding-top:12px}
+  .instructions h4{font-size:13px;color:#666;margin-bottom:8px;font-weight:600}
+  .instr-step{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0;align-items:flex-start}
+  .instr-step:last-child{border-bottom:none}
+  .instr-num{width:22px;height:22px;border-radius:50%;background:#2196F3;color:white;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+  .instr-num.toll{background:#FF9800}
+  .instr-text{flex:1;font-size:13px;color:#333;line-height:1.4}
+  .instr-text .road{font-weight:700;color:#1565C0}
+  .instr-meta{font-size:11px;color:#999;margin-top:2px}
+  .instr-price{font-size:12px;font-weight:700;color:#FF9800;white-space:nowrap}
   @media(max-width:480px){
     .bottom-panel{padding:14px;border-radius:16px 16px 0 0;max-height:65vh}
     .route-inputs{flex-wrap:wrap}
@@ -88,6 +101,7 @@
         <span class="budget-val" id="budgetValue">0 €</span>
       </div>
       <div class="toll-breakdown" id="tollBreakdown"></div>
+      <div class="instructions" id="instructions" style="display:none"></div>
       <a class="maps-btn" id="mapsBtn" href="#" target="_blank" rel="noopener" style="display:none">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="white" style="vertical-align:middle;margin-right:6px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
         Abrir en Google Maps
@@ -406,6 +420,107 @@ function estimateTolls(geometry) {
 }
 
 // ============================================================
+// Indicaciones paso a paso desde la geometría
+// ============================================================
+
+function buildInstructions(routeType) {
+  const r = currentRoutes[routeType];
+  if (!r || !r.route?.geometry?.coordinates) return [];
+
+  const coords = r.route.geometry.coordinates;
+  const tolls = routeType === 'tollFree' ? { items: [] } : r.tolls;
+  const steps = [];
+
+  // Paso 1: salida
+  steps.push({
+    type: 'start',
+    text: 'Sal desde el origen hacia el destino',
+    distance: null,
+    price: null
+  });
+
+  // Buscar peajes en orden a lo largo de la ruta
+  const tollPoints = [];
+  for (const item of tolls.items || []) {
+    for (const seg of item.segments || []) {
+      const entryCoord = stationCoords[seg.from];
+      if (entryCoord) {
+        tollPoints.push({
+          type: 'toll',
+          text: `Peaje en <span class="road">${item.roadName}</span>`,
+          detail: `${seg.from} → ${seg.to}`,
+          price: seg.rate,
+          coord: entryCoord,
+          order: findClosestRouteIndex(coords, entryCoord)
+        });
+      }
+    }
+  }
+
+  // Sort by route position
+  tollPoints.sort((a, b) => a.order - b.order);
+
+  // Interleave highway segments and tolls
+  // Simplified: just list tolls as steps since we don't have OSRM step data
+  for (const tp of tollPoints) {
+    steps.push(tp);
+  }
+
+  // Final step
+  const totalKm = (r.dist / 1000).toFixed(1);
+  const totalMin = Math.round(r.time / 60);
+  const th = Math.floor(totalMin / 60), tm = totalMin % 60;
+  steps.push({
+    type: 'end',
+    text: `Llegada al destino`,
+    detail: `Total: ${totalKm} km · ${th > 0 ? th + 'h ' + tm + 'm' : tm + ' min'}`,
+    distance: null,
+    price: null
+  });
+
+  return steps;
+}
+
+function findClosestRouteIndex(routeCoords, point) {
+  let bestIdx = 0, bestDist = Infinity;
+  for (let i = 0; i < routeCoords.length; i++) {
+    const d = haversine(routeCoords[i][0], routeCoords[i][1], point[0], point[1]);
+    if (d < bestDist) { bestDist = d; bestIdx = i; }
+  }
+  return bestIdx;
+}
+
+function renderInstructions() {
+  const container = document.getElementById('instructions');
+  const steps = buildInstructions(selectedRouteType);
+
+  if (steps.length <= 2) {
+    container.style.display = 'none';
+    return;
+  }
+
+  let html = '<h4>🧭 Indicaciones</h4>';
+  let stepNum = 1;
+  for (const s of steps) {
+    if (s.type === 'toll') {
+      html += `<div class="instr-step">
+        <div class="instr-num toll">€</div>
+        <div class="instr-text">${s.text}<div class="instr-meta">${s.detail}</div></div>
+        <div class="instr-price">${s.price.toFixed(2)} €</div>
+      </div>`;
+    } else {
+      html += `<div class="instr-step">
+        <div class="instr-num">${stepNum}</div>
+        <div class="instr-text">${s.text}${s.detail ? '<div class="instr-meta">' + s.detail + '</div>' : ''}</div>
+      </div>`;
+      stepNum++;
+    }
+  }
+  container.innerHTML = html;
+  container.style.display = 'block';
+}
+
+// ============================================================
 // UI Principal
 // ============================================================
 
@@ -469,8 +584,9 @@ async function calculateRoute() {
     document.getElementById('budgetFilter').style.display = 'flex';
 
     renderRouteSelector();
-    renderRoute();
+    renderBothRoutes();
     renderTollBreakdown();
+    renderInstructions();
     updateMapsBtn();
 
     routeCard.classList.add('visible');
@@ -494,7 +610,7 @@ function renderRouteSelector() {
   let html = '';
   html += `<button class="route-tab ${selectedRouteType === 'fastest' ? 'active' : ''}" onclick="selectRouteType('fastest')">`;
   html += `⚡ Más rápida<div class="tab-price">${f.tolls.total.toFixed(2)} € · ${fh}h ${fr}m</div></button>`;
-  html += `<button class="route-tab ${selectedRouteType === 'tollFree' ? 'active' : ''}" onclick="selectRouteType('tollFree')">`;
+  html += `<button class="route-tab tollfree ${selectedRouteType === 'tollFree' ? 'active tollfree' : ''}" onclick="selectRouteType('tollFree')">`;
   html += `🐢 Sin peajes${t.estimated ? '<span class="badge estimated">estimado</span>' : ''}<div class="tab-price">0 € · ${th}h ${tr}m</div></button>`;
   document.getElementById('routeSelector').innerHTML = html;
 }
@@ -502,24 +618,55 @@ function renderRouteSelector() {
 function selectRouteType(type) {
   selectedRouteType = type;
   renderRouteSelector();
-  renderRoute();
+  renderBothRoutes();
   renderTollBreakdown();
+  renderInstructions();
   updateMapsBtn();
 }
 
-function renderRoute() {
+function renderBothRoutes() {
   routeLayers.forEach(l => map.removeLayer(l));
   routeLayers = [];
 
-  const r = currentRoutes[selectedRouteType];
-  const color = selectedRouteType === 'tollFree' ? '#4CAF50' : '#2196F3';
+  const f = currentRoutes.fastest;
+  const t = currentRoutes.tollFree;
 
-  const line = L.geoJSON(r.route.geometry, {
-    style: { color: color, weight: 5, opacity: 0.85, lineJoin: 'round' }
-  }).addTo(map);
-  routeLayers.push(line);
+  // Render toll-free route first (so it's behind)
+  if (t && t.route?.geometry) {
+    const isSelected = selectedRouteType === 'tollFree';
+    const line = L.geoJSON(t.route.geometry, {
+      style: {
+        color: '#4CAF50',
+        weight: isSelected ? 6 : 4,
+        opacity: isSelected ? 0.9 : 0.35,
+        lineJoin: 'round',
+        dashArray: isSelected ? null : '8,6'
+      }
+    }).addTo(map);
+    line.routeType = 'tollFree';
+    line.on('click', () => selectRouteType('tollFree'));
+    routeLayers.push(line);
+  }
 
-  const coords = r.route.geometry.coordinates;
+  // Render fastest route
+  if (f && f.route?.geometry) {
+    const isSelected = selectedRouteType === 'fastest';
+    const line = L.geoJSON(f.route.geometry, {
+      style: {
+        color: '#2196F3',
+        weight: isSelected ? 6 : 4,
+        opacity: isSelected ? 0.9 : 0.35,
+        lineJoin: 'round',
+        dashArray: isSelected ? null : '8,6'
+      }
+    }).addTo(map);
+    line.routeType = 'fastest';
+    line.on('click', () => selectRouteType('fastest'));
+    routeLayers.push(line);
+  }
+
+  // Origin marker (shared)
+  const coords = f.route.geometry.coordinates;
   if (coords?.length > 0) {
     routeLayers.push(L.marker([coords[0][1], coords[0][0]], {
       icon: L.divIcon({ className: '', html: '<div style="background:#4CAF50;width:14px;height:14px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>', iconSize: [20,20], iconAnchor: [10,10] })
@@ -529,7 +676,32 @@ function renderRoute() {
     }).addTo(map).bindPopup('<b>B</b> Destino'));
   }
 
-  // Render stats
+  // Toll markers on the FASTEST route
+  if (selectedRouteType === 'fastest' && f.tolls?.items) {
+    for (const item of f.tolls.items) {
+      for (const seg of item.segments || []) {
+        const coord = stationCoords[seg.from];
+        if (coord) {
+          const marker = L.marker([coord[1], coord[0]], {
+            icon: L.divIcon({
+              className: '',
+              html: `<div style="background:#FF9800;width:16px;height:16px;border-radius:50%;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:white;">€</div>`,
+              iconSize: [18,18],
+              iconAnchor: [9,9]
+            })
+          }).addTo(map).bindPopup(
+            `<b>🚧 Peaje ${item.roadName}</b><br>` +
+            `${seg.from} → ${seg.to}<br>` +
+            `<b style="color:#FF9800">${seg.rate.toFixed(2)} €</b>`
+          );
+          routeLayers.push(marker);
+        }
+      }
+    }
+  }
+
+  // Render stats for selected route
+  const r = currentRoutes[selectedRouteType];
   const m = Math.round(r.time / 60), h = Math.floor(m / 60), rm = m % 60;
   document.getElementById('mainStats').innerHTML = `
     <div class="stat"><div class="value">${h > 0 ? h + 'h ' + rm + 'm' : rm + ' min'}</div><div class="label">Tiempo</div></div>
@@ -567,23 +739,11 @@ function renderTollBreakdown() {
   }
 
   html += `<div class="toll-total"><span>Total incluido</span><span>${filteredTotal.toFixed(2)} €</span></div>`;
-  html += `<div class="hint-text">💡 Desmarca peajes para ver cuánto ahorras. La ruta en el mapa muestra la opción más rápida o sin peajes.</div>`;
+  html += `<div class="hint-text">💡 Toca la ruta en el mapa para cambiar. Los peajes se marcan con 🟠.</div>`;
   container.innerHTML = html;
 }
 
 function toggleToll(road, checked) {
-  // Update budget slider to reflect this toggle
-  let includedTotal = 0;
-  for (const item of currentTollBreakdown) {
-    if (item.road === road) {
-      if (checked) includedTotal += item.total;
-    } else {
-      // Check if it was already included by budget
-      const budget = parseFloat(document.getElementById('budgetSlider').value);
-      if (item.total <= budget || item.estimated) includedTotal += item.total;
-    }
-  }
-  // Re-render
   renderTollBreakdown();
 }
 
@@ -597,7 +757,27 @@ function updateMapsBtn() {
   if (!r) return;
   const [lon1, lat1] = r.from;
   const [lon2, lat2] = r.to;
-  const url = `https://www.google.com/maps/dir/?api=1&origin=${lat1},${lon1}&destination=${lat2},${lon2}&travelmode=driving`;
+
+  // Build waypoints to avoid tolls if tollFree is selected
+  let url;
+  if (selectedRouteType === 'tollFree' && currentRoutes.tollFree && !currentRoutes.tollFree.estimated) {
+    // Try to add waypoints along the toll-free route to force Google Maps to take it
+    const coords = r.route.geometry.coordinates;
+    const waypoints = [];
+    // Pick a midpoint waypoint
+    if (coords.length > 10) {
+      const mid = coords[Math.floor(coords.length / 2)];
+      waypoints.push(`${mid[1]},${mid[0]}`);
+    }
+    if (waypoints.length > 0) {
+      url = `https://www.google.com/maps/dir/?api=1&origin=${lat1},${lon1}&destination=${lat2},${lon2}&waypoints=${waypoints.join('|')}&travelmode=driving`;
+    } else {
+      url = `https://www.google.com/maps/dir/?api=1&origin=${lat1},${lon1}&destination=${lat2},${lon2}&travelmode=driving`;
+    }
+  } else {
+    url = `https://www.google.com/maps/dir/?api=1&origin=${lat1},${lon1}&destination=${lat2},${lon2}&travelmode=driving`;
+  }
+
   const btn = document.getElementById('mapsBtn');
   btn.href = url;
   btn.style.display = 'block';
