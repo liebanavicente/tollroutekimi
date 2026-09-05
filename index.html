@@ -590,6 +590,10 @@ async function calculateRoute() {
     updateMapsBtn();
 
     routeCard.classList.add('visible');
+    status.style.display = 'none';
+    setTimeout(() => { map.invalidateSize(); }, 100);
+    const bounds = L.geoJSON(fastRoute.geometry).getBounds();
+    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
     const bounds = L.geoJSON(fastRoute.geometry).getBounds();
     map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
 
